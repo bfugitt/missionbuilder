@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>California Mission Designer 3.0</title>
+    <title>California Mission Designer 4.0</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -38,6 +38,13 @@
         .animate-fade-in {
             animation: fadeIn 0.5s ease-out;
         }
+        @keyframes bounce-small {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
+        .animate-bounce-small {
+            animation: bounce-small 2s infinite;
+        }
     </style>
 </head>
 <body>
@@ -46,8 +53,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- ICONS (Fixed sizing logic) ---
-        // Helper to handle size prop correctly for inline SVGs
+        // --- ICONS ---
         const IconWrapper = ({ size = 24, children, ...props }) => (
             React.cloneElement(children, { 
                 width: size, 
@@ -74,6 +80,7 @@
             Fence: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16"/><path d="M4 18h16"/><path d="M6 2v20"/><path d="M18 2v20"/><path d="M14 6l4 12"/><path d="M10 18l4-12"/></svg></IconWrapper>,
             Scroll: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2h8a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4Z"/><path d="M8 6h8"/><path d="M8 10h8"/><path d="M8 14h8"/><path d="M8 18h4"/></svg></IconWrapper>,
             Box: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></IconWrapper>,
+            Trophy: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></IconWrapper>,
         };
 
         const TEACHER_CONFIG = {
@@ -83,31 +90,31 @@
             BADGE_SCORE_THRESHOLD: 65,
         };
 
-        // Added Orchard, Corral, Tannery based on text
         const BUILDING_TYPES = [
-            // HUGE (4x4)
             { id: 'plaza', label: 'Main Plaza', cost: 30, w: 4, h: 4, icon: Icons.Square, color: 'text-stone-700', bg: 'bg-stone-300', description: 'Central gathering space. (4x4)' },
-            
-            // LARGE (2x3)
             { id: 'church', label: 'Church', cost: 45, w: 2, h: 3, icon: Icons.Church, color: 'text-amber-800', bg: 'bg-amber-100', description: 'Adobe spiritual center. (2x3)' },
-            
-            // LARGE SQUARES (2x2)
             { id: 'orchard', label: 'Orchard', cost: 20, w: 2, h: 2, icon: Icons.Apple, color: 'text-lime-700', bg: 'bg-lime-100', description: 'Trees introduced by missionaries. (2x2)' },
             { id: 'corral', label: 'Corral', cost: 25, w: 2, h: 2, icon: Icons.Fence, color: 'text-yellow-900', bg: 'bg-yellow-100', description: 'Pasture for cattle & horses. (2x2)' },
             { id: 'cemetery', label: 'Cemetery', cost: 10, w: 2, h: 2, icon: Icons.Trees, color: 'text-stone-500', bg: 'bg-stone-200', description: 'Resting place. (2x2)' },
-            
-            // WIDE (3x1)
             { id: 'soldiers', label: 'Barracks', cost: 25, w: 3, h: 1, icon: Icons.Tent, color: 'text-red-800', bg: 'bg-red-100', description: 'Soldier housing. (3x1)' },
-            
-            // WIDE (2x1)
             { id: 'workshop', label: 'Workshop', cost: 20, w: 2, h: 1, icon: Icons.Hammer, color: 'text-slate-700', bg: 'bg-slate-200', description: 'Weaving, pottery, & tools. (2x1)' },
-
-            // SMALL (1x1)
             { id: 'quarters', label: 'Living Qtrs', cost: 15, w: 1, h: 1, icon: Icons.Home, color: 'text-orange-700', bg: 'bg-orange-100', description: 'Adobe homes. (1x1)' },
             { id: 'garden', label: 'Garden', cost: 10, w: 1, h: 1, icon: Icons.Wheat, color: 'text-emerald-700', bg: 'bg-emerald-100', description: 'Crops like wheat & corn. (1x1)' },
             { id: 'water', label: 'Water', cost: 15, w: 1, h: 1, icon: Icons.Droplets, color: 'text-blue-600', bg: 'bg-blue-100', description: 'Irrigation & fountains. (1x1)' },
             { id: 'tannery', label: 'Tannery', cost: 15, w: 1, h: 1, icon: Icons.Box, color: 'text-amber-900', bg: 'bg-amber-200', description: 'Processing hides & tallow. (1x1)' },
             { id: 'belltower', label: 'Bell Tower', cost: 20, w: 1, h: 1, icon: Icons.Bell, color: 'text-amber-600', bg: 'bg-amber-50', description: 'Rings for work & prayer. (1x1)' },
+        ];
+
+        const HISTORICAL_TIPS = [
+            "Mission churches were made of adobe (uh-DOH-be), a brick made of mud and straw.",
+            "Bells rang at sunrise to call everyone to work and morning prayers.",
+            "Tallow (animal fat) from the cattle was used to make soap and candles.",
+            "Missions were designed like self-sufficient villages with housing, farms, and workshops.",
+            "The central courtyard, or Plaza, was enclosed by buildings for protection and community.",
+            "Mission Indians learned skilled trades like carpentry, blacksmithing, and leatherwork.",
+            "Hides from cattle were 'tanned' in vats to create leather for saddles and shoes.",
+            "Orchards provided fruit, while gardens supplied beans, corn, and wheat.",
+            "El Camino Real ('The Royal Road') connected all the California missions.",
         ];
 
         const ADJACENCY_BONUSES = [
@@ -127,13 +134,18 @@
             const [messages, setMessages] = useState([]);
             const [badges, setBadges] = useState([]);
             const [showSplash, setShowSplash] = useState(true);
+            const [currentTipIndex, setCurrentTipIndex] = useState(0);
+            const [movesCount, setMovesCount] = useState(0);
             
             const [hoverState, setHoverState] = useState({ r: null, c: null, valid: true, footprint: [] });
 
+            // Calculate minimum cost to check for "Game Over"
+            const minCost = useMemo(() => Math.min(...BUILDING_TYPES.map(b => b.cost)), []);
+
             useEffect(() => {
-                const savedGrid = localStorage.getItem('missionGrid_v3.0');
-                const savedAdobe = localStorage.getItem('missionAdobe_v3.0');
-                const savedBadges = localStorage.getItem('missionBadges_v3.0');
+                const savedGrid = localStorage.getItem('missionGrid_v4.0');
+                const savedAdobe = localStorage.getItem('missionAdobe_v4.0');
+                const savedBadges = localStorage.getItem('missionBadges_v4.0');
                 
                 if (savedGrid) setGrid(JSON.parse(savedGrid));
                 if (savedAdobe) setAdobe(parseInt(savedAdobe));
@@ -141,9 +153,9 @@
             }, []);
 
             useEffect(() => {
-                localStorage.setItem('missionGrid_v3.0', JSON.stringify(grid));
-                localStorage.setItem('missionAdobe_v3.0', adobe.toString());
-                localStorage.setItem('missionBadges_v3.0', JSON.stringify(badges));
+                localStorage.setItem('missionGrid_v4.0', JSON.stringify(grid));
+                localStorage.setItem('missionAdobe_v4.0', adobe.toString());
+                localStorage.setItem('missionBadges_v4.0', JSON.stringify(badges));
                 calculateScore();
             }, [grid]);
 
@@ -264,7 +276,7 @@
                     return;
                 }
 
-                // Double check validity before placing
+                // Check placement
                 const h = draggedItem.h || 1;
                 const w = draggedItem.w || 1;
                 for(let i=0; i<h; i++){
@@ -291,6 +303,13 @@
                 setAdobe(prev => prev - draggedItem.cost);
                 addMessage(`Built ${draggedItem.label}`);
                 setDraggedItem(null);
+
+                // Handle Tip Cycling
+                const nextMove = movesCount + 1;
+                setMovesCount(nextMove);
+                if (nextMove % 3 === 0) {
+                    setCurrentTipIndex(prev => (prev + 1) % HISTORICAL_TIPS.length);
+                }
             };
 
             const handleDelete = (r, c) => {
@@ -328,20 +347,62 @@
             };
 
             const resetGame = () => {
-                if (window.confirm("Start fresh? This deletes the current mission.")) {
-                    setGrid(Array(TEACHER_CONFIG.GRID_HEIGHT).fill().map(() => Array(TEACHER_CONFIG.GRID_WIDTH).fill(null)));
-                    setAdobe(TEACHER_CONFIG.STARTING_ADOBE);
-                    setBadges([]);
-                    setScore(0);
-                    setMessages([]);
-                    localStorage.removeItem('missionGrid_v3.0');
-                    localStorage.removeItem('missionAdobe_v3.0');
-                    localStorage.removeItem('missionBadges_v3.0');
-                    setShowSplash(true);
-                }
+                setGrid(Array(TEACHER_CONFIG.GRID_HEIGHT).fill().map(() => Array(TEACHER_CONFIG.GRID_WIDTH).fill(null)));
+                setAdobe(TEACHER_CONFIG.STARTING_ADOBE);
+                setBadges([]);
+                setScore(0);
+                setMessages([]);
+                setMovesCount(0);
+                localStorage.removeItem('missionGrid_v4.0');
+                localStorage.removeItem('missionAdobe_v4.0');
+                localStorage.removeItem('missionBadges_v4.0');
+                setShowSplash(true);
             };
 
             // --- Sub-Components ---
+
+            const CompletionScreen = () => (
+                <div className="fixed inset-0 bg-stone-900/90 z-[100] flex items-center justify-center p-4 animate-fade-in">
+                    <div className="bg-white p-8 rounded-xl max-w-lg w-full shadow-2xl border-4 border-emerald-500 relative text-center">
+                         <div className="mx-auto bg-emerald-100 text-emerald-800 w-20 h-20 rounded-full flex items-center justify-center mb-4 shadow-sm animate-bounce-small">
+                            <Icons.Trophy size={40} />
+                        </div>
+                        <h2 className="text-3xl font-bold text-stone-800 mb-2">Mission Complete!</h2>
+                        <p className="text-stone-600 mb-6">You used all your Adobe bricks. Here is your summary:</p>
+                        
+                        <div className="flex justify-center gap-8 mb-8">
+                            <div className="text-center">
+                                <div className="text-4xl font-bold text-emerald-600">{score}</div>
+                                <div className="text-xs uppercase tracking-wide text-stone-400 font-bold">Harmony</div>
+                            </div>
+                             <div className="text-center">
+                                <div className="text-4xl font-bold text-amber-600">{badges.length}</div>
+                                <div className="text-xs uppercase tracking-wide text-stone-400 font-bold">Badges</div>
+                            </div>
+                        </div>
+
+                        {badges.length > 0 && (
+                            <div className="mb-8">
+                                <h3 className="text-sm font-bold text-stone-500 uppercase mb-3">Badges Earned</h3>
+                                <div className="flex flex-wrap gap-2 justify-center">
+                                    {badges.map((b, i) => (
+                                        <span key={i} className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-bold border border-amber-200">
+                                            {b}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <button 
+                            onClick={resetGame}
+                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-lg transition-transform hover:scale-[1.01]"
+                        >
+                            Start New Mission
+                        </button>
+                    </div>
+                </div>
+            );
 
             const SplashScreen = () => (
                 <div className="fixed inset-0 bg-stone-900/80 z-[100] flex items-center justify-center p-4 animate-fade-in">
@@ -392,31 +453,47 @@
 
             // --- Render ---
 
+            // Check if Game Over (No bricks left to build cheapest building)
+            const isGameOver = !showSplash && adobe < minCost;
+
             return (
                 <div className="min-h-screen bg-stone-50 font-sans text-stone-800 flex flex-col items-center p-4">
                     
                     {showSplash && <SplashScreen />}
+                    {isGameOver && <CompletionScreen />}
 
                     {/* HEADER */}
-                    <header className="w-full max-w-6xl flex flex-col md:flex-row justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border-b-4 border-stone-200">
-                        <div className="mb-4 md:mb-0">
-                            <h1 className="text-3xl font-bold text-stone-700 tracking-tight flex items-center gap-2">
-                                <Icons.Church className="text-amber-700" size={32}/> Mission Architect
+                    <header className="w-full max-w-6xl flex flex-col md:flex-row gap-4 justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border-b-4 border-stone-200">
+                        <div className="flex-shrink-0 text-center md:text-left">
+                            <h1 className="text-2xl font-bold text-stone-700 tracking-tight flex items-center gap-2 justify-center md:justify-start">
+                                <Icons.Church className="text-amber-700" size={28}/> Mission Architect
                             </h1>
-                            <p className="text-stone-500 text-sm">Design a functional mission community</p>
+                            <p className="text-stone-400 text-xs mt-1">Design a functional mission community</p>
+                        </div>
+
+                        {/* Badges in Header */}
+                        <div className="flex-1 overflow-x-auto no-scrollbar mx-4 w-full md:w-auto">
+                            <div className="flex gap-2 items-center justify-center md:justify-start h-10 px-2">
+                                {badges.length === 0 && <span className="text-xs text-stone-300 italic">Earn badges by building...</span>}
+                                {badges.map((badge, idx) => (
+                                    <div key={idx} className="flex-shrink-0 flex items-center gap-1 bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-[10px] font-bold border border-amber-200 shadow-sm animate-fade-in">
+                                        <Icons.Award size={12} /> {badge}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                         
-                        <div className="flex gap-6 items-center">
-                            <div className="text-center px-4 py-2 bg-emerald-50 rounded-lg border border-emerald-100 min-w-[100px]">
-                                <p className="text-xs uppercase tracking-wider text-emerald-800 font-bold">Harmony</p>
-                                <p className="text-2xl font-bold text-emerald-600">{score}</p>
+                        <div className="flex gap-4 items-center flex-shrink-0">
+                            <div className="text-center px-4 py-1 bg-emerald-50 rounded-lg border border-emerald-100 min-w-[80px]">
+                                <p className="text-[10px] uppercase tracking-wider text-emerald-800 font-bold">Harmony</p>
+                                <p className="text-xl font-bold text-emerald-600">{score}</p>
                             </div>
-                            <div className="text-center px-4 py-2 bg-orange-50 rounded-lg border border-orange-100 min-w-[100px]">
-                                <p className="text-xs uppercase tracking-wider text-orange-800 font-bold">Bricks</p>
-                                <p className={`text-2xl font-bold ${adobe < 20 ? 'text-red-500' : 'text-orange-700'}`}>{adobe}</p>
+                            <div className="text-center px-4 py-1 bg-orange-50 rounded-lg border border-orange-100 min-w-[80px]">
+                                <p className="text-[10px] uppercase tracking-wider text-orange-800 font-bold">Bricks</p>
+                                <p className={`text-xl font-bold ${adobe < 20 ? 'text-red-500' : 'text-orange-700'}`}>{adobe}</p>
                             </div>
-                            <button onClick={resetGame} className="p-2 hover:bg-stone-100 rounded-full text-stone-500 transition-colors" title="Reset">
-                                <Icons.RotateCcw size={20} />
+                            <button onClick={() => { if(window.confirm("Restart?")) resetGame(); }} className="p-2 hover:bg-stone-100 rounded-full text-stone-500 transition-colors" title="Reset">
+                                <Icons.RotateCcw size={18} />
                             </button>
                         </div>
                     </header>
@@ -425,8 +502,8 @@
                     <div className="w-full max-w-6xl flex flex-col lg:flex-row gap-6 items-start">
                         
                         {/* SIDEBAR */}
-                        <div className="w-full lg:w-72 flex-shrink-0 bg-white p-4 rounded-xl shadow-sm border border-stone-200 sticky top-4 max-h-[90vh] overflow-y-auto no-scrollbar">
-                            <h2 className="font-bold text-md mb-4 text-stone-600 uppercase tracking-widest text-xs border-b pb-2 flex items-center gap-2">
+                        <div className="w-full lg:w-64 flex-shrink-0 bg-white p-4 rounded-xl shadow-sm border border-stone-200 sticky top-4 max-h-[80vh] overflow-y-auto no-scrollbar">
+                            <h2 className="font-bold text-sm mb-4 text-stone-600 uppercase tracking-widest border-b pb-2 flex items-center gap-2">
                                 <Icons.Scroll size={16}/> Blueprints
                             </h2>
                             
@@ -443,35 +520,20 @@
                                                 : 'opacity-40 cursor-not-allowed bg-stone-50 grayscale'}
                                         `}
                                     >
-                                        <div className={`w-10 h-10 flex items-center justify-center rounded-md ${b.bg} ${b.color} flex-shrink-0`}>
-                                            <b.icon size={20} />
+                                        <div className={`w-8 h-8 flex items-center justify-center rounded-md ${b.bg} ${b.color} flex-shrink-0`}>
+                                            <b.icon size={18} />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <span className="font-bold text-sm text-stone-700 truncate">{b.label}</span>
-                                                <span className="text-xs font-bold bg-stone-200 px-1.5 py-0.5 rounded text-stone-600">{b.cost}</span>
+                                            <div className="flex justify-between items-center mb-0.5">
+                                                <span className="font-bold text-xs text-stone-700 truncate">{b.label}</span>
+                                                <span className="text-[10px] font-bold bg-stone-200 px-1.5 py-0.5 rounded text-stone-600">{b.cost}</span>
                                             </div>
                                             <div className="flex justify-between items-center">
-                                                <span className="text-[10px] text-stone-400 bg-stone-100 px-1 rounded border border-stone-200">{b.w}x{b.h}</span>
-                                                <span className="text-[10px] text-stone-400 truncate ml-2 max-w-[80px]">{b.description}</span>
+                                                <span className="text-[9px] text-stone-400 bg-stone-100 px-1 rounded border border-stone-200">{b.w}x{b.h}</span>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
-                            </div>
-
-                            <div className="mt-6 pt-4 border-t border-stone-100">
-                                <h3 className="font-bold text-xs text-stone-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                    <Icons.Award size={14} /> Badges Earned
-                                </h3>
-                                <div className="flex flex-wrap gap-2">
-                                    {badges.length === 0 && <span className="text-xs text-stone-400 italic">Start building to earn badges...</span>}
-                                    {badges.map((badge, idx) => (
-                                        <div key={idx} className="flex items-center gap-1 bg-amber-100 text-amber-800 px-2 py-1 rounded-md text-[10px] font-bold border border-amber-200 shadow-sm animate-pulse">
-                                            <Icons.Award size={10} /> {badge}
-                                        </div>
-                                    ))}
-                                </div>
                             </div>
                         </div>
 
@@ -479,6 +541,7 @@
                         <div className="flex-1 w-full overflow-x-auto pb-8">
                             <div className="bg-[#e6e2d6] p-4 lg:p-8 rounded-xl shadow-inner inline-block min-w-full relative">
                                 
+                                {/* Messages Toast */}
                                 <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
                                     {messages.map((m, i) => (
                                         <div key={i} className="bg-stone-800 text-white text-sm py-2 px-4 rounded shadow-xl animate-bounce">
@@ -561,10 +624,18 @@
                                         })
                                     ))}
                                 </div>
-                                <div className="mt-4 flex gap-2 items-center text-sm text-stone-500 italic">
-                                    <Icons.Info size={16} />
-                                    <span>Tip: The Plaza (4x4) is huge! Make sure you clear enough space for it.</span>
+                                
+                                {/* DYNAMIC TIP SECTION */}
+                                <div className="mt-4 flex gap-3 items-start bg-white/50 p-3 rounded-lg border border-stone-200 text-stone-600 transition-all duration-500">
+                                    <div className="mt-0.5 text-amber-600">
+                                        <Icons.Info size={20} />
+                                    </div>
+                                    <div className="text-sm">
+                                        <p className="font-bold text-xs uppercase text-stone-400 mb-1">Did you know?</p>
+                                        <p className="italic leading-relaxed">{HISTORICAL_TIPS[currentTipIndex]}</p>
+                                    </div>
                                 </div>
+
                             </div>
                         </div>
                     </div>
