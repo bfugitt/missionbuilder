@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>California Mission Designer 5.1</title>
+    <title>California Mission Designer 5.2</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -49,15 +49,24 @@
         
         /* PRINT STYLES */
         @media print {
-            body { overflow: visible; background: white; }
+            body { 
+                overflow: visible; 
+                background: white; 
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact;
+            }
             .no-print { display: none !important; }
             .print-only { display: block !important; }
+            .print-no-label { display: none !important; } /* Hides labels in grid cells on print */
+            
             .print-grid-container { 
-                transform: scale(0.8); 
-                transform-origin: top left;
+                transform: scale(0.9); 
+                transform-origin: top center;
                 break-inside: avoid;
+                box-shadow: none;
+                border: 2px solid #ccc;
             }
-            .print-badge { border: 1px solid #ccc; color: black; }
+            .print-badge { border: 1px solid #ccc; color: black; background-color: #fef3c7 !important; }
         }
         .print-only { display: none; }
     </style>
@@ -172,17 +181,25 @@
             { id: 'workshop', label: 'Workshop', cost: 20, w: 2, h: 1, icon: Icons.Hammer, color: 'text-slate-700', bg: 'bg-slate-200', category: 'trade', description: 'General crafts. (2x1)' },
         ];
 
-        // RESTORED HARMONY BONUSES
+        // ENHANCED HARMONY BONUSES with New Structures
         const ADJACENCY_BONUSES = [
+            // Water & Food
             { type1: 'garden', type2: 'water', bonus: 5, message: 'Irrigation Bonus! (Garden + Water)' },
             { type1: 'orchard', type2: 'water', bonus: 5, message: 'Irrigation Bonus! (Orchard + Water)' },
             { type1: 'farm_field', type2: 'water', bonus: 5, message: 'Irrigation Bonus! (Farm + Water)' },
+            // Community
             { type1: 'church', type2: 'plaza', bonus: 10, message: 'Town Center Bonus! (Church + Plaza)' },
-            { type1: 'workshop', type2: 'quarters', bonus: 3, message: 'Worker Access! (Workshop + Qtrs)' },
-            { type1: 'tannery', type2: 'corral', bonus: 5, message: 'Supply Chain! (Tannery + Corral)' },
             { type1: 'church', type2: 'belltower', bonus: 5, message: 'Classic Design! (Church + Bell)' },
             { type1: 'priest_qtrs', type2: 'church', bonus: 5, message: 'Holy Connection! (Priest + Church)' },
+            { type1: 'soldiers', type2: 'plaza', bonus: 5, message: 'Protection! (Soldiers + Plaza)' },
+            // Industry
+            { type1: 'workshop', type2: 'quarters', bonus: 3, message: 'Worker Access! (Workshop + Qtrs)' },
+            { type1: 'tannery', type2: 'corral', bonus: 5, message: 'Supply Chain! (Tannery + Corral)' },
+            { type1: 'blacksmith', type2: 'carpenter', bonus: 5, message: 'Trades Hub! (Blacksmith + Carpenter)' },
+            // Animals & Farming
             { type1: 'cow', type2: 'corral', bonus: 3, message: 'Ranching! (Cow + Corral)' },
+            { type1: 'chicken', type2: 'garden', bonus: 3, message: 'Pest Control! (Chickens + Garden)' },
+            { type1: 'family_housing', type2: 'garden', bonus: 3, message: 'Self Reliance! (Family + Garden)' },
         ];
 
         const HISTORICAL_TIPS = [
@@ -241,9 +258,9 @@
             const minCost = useMemo(() => Math.min(...BUILDING_TYPES.map(b => b.cost)), []);
 
             useEffect(() => {
-                const savedGrid = localStorage.getItem('missionGrid_v5.1');
-                const savedAdobe = localStorage.getItem('missionAdobe_v5.1');
-                const savedBadges = localStorage.getItem('missionBadges_v5.1');
+                const savedGrid = localStorage.getItem('missionGrid_v5.2');
+                const savedAdobe = localStorage.getItem('missionAdobe_v5.2');
+                const savedBadges = localStorage.getItem('missionBadges_v5.2');
                 
                 if (savedGrid) setGrid(JSON.parse(savedGrid));
                 if (savedAdobe) setAdobe(parseInt(savedAdobe));
@@ -251,9 +268,9 @@
             }, []);
 
             useEffect(() => {
-                localStorage.setItem('missionGrid_v5.1', JSON.stringify(grid));
-                localStorage.setItem('missionAdobe_v5.1', adobe.toString());
-                localStorage.setItem('missionBadges_v5.1', JSON.stringify(badges));
+                localStorage.setItem('missionGrid_v5.2', JSON.stringify(grid));
+                localStorage.setItem('missionAdobe_v5.2', adobe.toString());
+                localStorage.setItem('missionBadges_v5.2', JSON.stringify(badges));
                 calculateScore();
             }, [grid]);
 
@@ -273,7 +290,7 @@
                     }
                 }
 
-                // Check Adjacency Bonuses (FIXED: Now uses ADJACENCY_BONUSES)
+                // Check Adjacency Bonuses
                 for(let i=0; i<buildings.length; i++){
                     for(let j=i+1; j<buildings.length; j++){
                         const b1 = buildings[i];
@@ -455,10 +472,34 @@
                 setScore(0);
                 setMessages([]);
                 setMovesCount(0);
-                localStorage.removeItem('missionGrid_v5.1');
-                localStorage.removeItem('missionAdobe_v5.1');
-                localStorage.removeItem('missionBadges_v5.1');
+                localStorage.removeItem('missionGrid_v5.2');
+                localStorage.removeItem('missionAdobe_v5.2');
+                localStorage.removeItem('missionBadges_v5.2');
                 setShowSplash(true);
+            };
+
+            // --- Legend Component for Print ---
+            const PrintLegend = ({ currentGrid }) => {
+                const usedIds = [...new Set(currentGrid.flat().filter(c => c && c.master).map(c => c.id))];
+                const usedBuildings = BUILDING_TYPES.filter(b => usedIds.includes(b.id));
+
+                if (usedBuildings.length === 0) return null;
+
+                return (
+                    <div className="print-only mt-6 w-full max-w-2xl mx-auto border-t pt-4">
+                        <h3 className="text-xl font-bold mb-3 text-center">Map Legend</h3>
+                        <div className="grid grid-cols-3 gap-2">
+                            {usedBuildings.map(b => (
+                                <div key={b.id} className="flex items-center gap-2 text-sm border p-1 rounded">
+                                    <div className={`w-6 h-6 flex items-center justify-center rounded ${b.bg} ${b.color}`}>
+                                        <b.icon size={14} />
+                                    </div>
+                                    <span>{b.label}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
             };
 
             // --- Grid Renderer Component ---
@@ -506,7 +547,7 @@
                                             <Icon size={isPreview ? 16 : 24} />
                                         </div>
                                         
-                                        <span className="text-[8px] md:text-[10px] font-bold leading-none mt-0.5 uppercase tracking-wide opacity-80 truncate w-full">
+                                        <span className="text-[8px] md:text-[10px] font-bold leading-none mt-0.5 uppercase tracking-wide opacity-80 truncate w-full print-no-label">
                                             {bInfo.label}
                                         </span>
                                         
@@ -619,12 +660,13 @@
                     <div className="print-only p-8 text-center">
                         <h1 className="text-4xl font-bold mb-2">My California Mission</h1>
                         <p className="text-xl mb-4">Harmony Score: {score} | Badges: {badges.length}</p>
-                        <div className="flex flex-wrap gap-2 justify-center mb-8">
+                        <div className="flex flex-wrap gap-2 justify-center mb-6">
                              {badges.map((b, i) => <span key={i} className="print-badge px-2 py-1 rounded text-sm">{b}</span>)}
                         </div>
                         <div className="flex justify-center" style={{ width: '600px', height: '400px', margin: '0 auto' }}>
                             <GridRenderer isPreview={true} />
                         </div>
+                        <PrintLegend currentGrid={grid} />
                     </div>
 
                     {/* HEADER */}
