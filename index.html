@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>California Mission Designer 4.0</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>California Mission Designer 5.1</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -21,6 +21,7 @@
         body {
             font-family: 'Noto Sans', sans-serif;
             background-color: #f5f5f4; /* stone-100 */
+            overflow: hidden; /* Prevent body scrolling for full-screen app */
         }
         /* Hide scrollbar for cleaner look */
         .no-scrollbar::-webkit-scrollbar {
@@ -45,13 +46,54 @@
         .animate-bounce-small {
             animation: bounce-small 2s infinite;
         }
+        
+        /* PRINT STYLES */
+        @media print {
+            body { overflow: visible; background: white; }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            .print-grid-container { 
+                transform: scale(0.8); 
+                transform-origin: top left;
+                break-inside: avoid;
+            }
+            .print-badge { border: 1px solid #ccc; color: black; }
+        }
+        .print-only { display: none; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+        // --- AUDIO ENGINE ---
+        const playBadgeSound = () => {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                
+                const ctx = new AudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+                osc.frequency.exponentialRampToValueAtTime(1046.5, ctx.currentTime + 0.1); // C6
+                
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+
+                osc.start();
+                osc.stop(ctx.currentTime + 0.5);
+            } catch (e) {
+                console.error("Audio play failed", e);
+            }
+        };
 
         // --- ICONS ---
         const IconWrapper = ({ size = 24, children, ...props }) => (
@@ -81,50 +123,107 @@
             Scroll: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 2h8a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4Z"/><path d="M8 6h8"/><path d="M8 10h8"/><path d="M8 14h8"/><path d="M8 18h4"/></svg></IconWrapper>,
             Box: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></IconWrapper>,
             Trophy: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></IconWrapper>,
+            Cross: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20"/><path d="M8 8h8"/></svg></IconWrapper>,
+            Users: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></IconWrapper>,
+            User: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></IconWrapper>,
+            Sprout: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg></IconWrapper>,
+            Bird: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 7h.01"/><path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20"/><path d="m20 7 2 .5-2 .5"/><path d="M10 18v3"/><path d="M14 17.75V21"/><path d="M7 18a6 6 0 0 0 3.84-10.61"/></svg></IconWrapper>,
+            Briefcase: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></IconWrapper>,
+            Saw: (p) => <IconWrapper {...p}><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 5 3-3 2 2-3 3"/><path d="M12 21V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3"/><path d="M12 21h7.5c1.4 0 2.5-1.1 2.5-2.5V10"/><path d="M12 21H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/></svg></IconWrapper>,
         };
 
         const TEACHER_CONFIG = {
             GRID_WIDTH: 12,
             GRID_HEIGHT: 8,
-            STARTING_ADOBE: 250,
-            BADGE_SCORE_THRESHOLD: 65,
+            STARTING_ADOBE: 400,
+            BADGE_SCORE_THRESHOLD: 80,
         };
 
+        // NEW BUILDING DEFINITIONS
         const BUILDING_TYPES = [
-            { id: 'plaza', label: 'Main Plaza', cost: 30, w: 4, h: 4, icon: Icons.Square, color: 'text-stone-700', bg: 'bg-stone-300', description: 'Central gathering space. (4x4)' },
-            { id: 'church', label: 'Church', cost: 45, w: 2, h: 3, icon: Icons.Church, color: 'text-amber-800', bg: 'bg-amber-100', description: 'Adobe spiritual center. (2x3)' },
-            { id: 'orchard', label: 'Orchard', cost: 20, w: 2, h: 2, icon: Icons.Apple, color: 'text-lime-700', bg: 'bg-lime-100', description: 'Trees introduced by missionaries. (2x2)' },
-            { id: 'corral', label: 'Corral', cost: 25, w: 2, h: 2, icon: Icons.Fence, color: 'text-yellow-900', bg: 'bg-yellow-100', description: 'Pasture for cattle & horses. (2x2)' },
-            { id: 'cemetery', label: 'Cemetery', cost: 10, w: 2, h: 2, icon: Icons.Trees, color: 'text-stone-500', bg: 'bg-stone-200', description: 'Resting place. (2x2)' },
-            { id: 'soldiers', label: 'Barracks', cost: 25, w: 3, h: 1, icon: Icons.Tent, color: 'text-red-800', bg: 'bg-red-100', description: 'Soldier housing. (3x1)' },
-            { id: 'workshop', label: 'Workshop', cost: 20, w: 2, h: 1, icon: Icons.Hammer, color: 'text-slate-700', bg: 'bg-slate-200', description: 'Weaving, pottery, & tools. (2x1)' },
-            { id: 'quarters', label: 'Living Qtrs', cost: 15, w: 1, h: 1, icon: Icons.Home, color: 'text-orange-700', bg: 'bg-orange-100', description: 'Adobe homes. (1x1)' },
-            { id: 'garden', label: 'Garden', cost: 10, w: 1, h: 1, icon: Icons.Wheat, color: 'text-emerald-700', bg: 'bg-emerald-100', description: 'Crops like wheat & corn. (1x1)' },
-            { id: 'water', label: 'Water', cost: 15, w: 1, h: 1, icon: Icons.Droplets, color: 'text-blue-600', bg: 'bg-blue-100', description: 'Irrigation & fountains. (1x1)' },
-            { id: 'tannery', label: 'Tannery', cost: 15, w: 1, h: 1, icon: Icons.Box, color: 'text-amber-900', bg: 'bg-amber-200', description: 'Processing hides & tallow. (1x1)' },
-            { id: 'belltower', label: 'Bell Tower', cost: 20, w: 1, h: 1, icon: Icons.Bell, color: 'text-amber-600', bg: 'bg-amber-50', description: 'Rings for work & prayer. (1x1)' },
+            // COMMUNITY & FAITH
+            { id: 'plaza', label: 'Plaza', cost: 30, w: 4, h: 4, icon: Icons.Square, color: 'text-stone-700', bg: 'bg-stone-300', category: 'community', description: 'Central gathering space. (4x4)' },
+            { id: 'church', label: 'Church', cost: 45, w: 2, h: 3, icon: Icons.Church, color: 'text-amber-800', bg: 'bg-amber-100', category: 'faith', description: 'Adobe spiritual center. (2x3)' },
+            { id: 'belltower', label: 'Bell Tower', cost: 20, w: 1, h: 1, icon: Icons.Bell, color: 'text-amber-600', bg: 'bg-amber-50', category: 'faith', description: 'Rings for work & prayer. (1x1)' },
+            { id: 'cemetery', label: 'Cemetery', cost: 10, w: 2, h: 2, icon: Icons.Trees, color: 'text-stone-500', bg: 'bg-stone-200', category: 'faith', description: 'Resting place. (2x2)' },
+            
+            // HOUSING
+            { id: 'priest_qtrs', label: 'Priest Qtrs', cost: 20, w: 1, h: 1, icon: Icons.Cross, color: 'text-purple-800', bg: 'bg-purple-100', category: 'housing', description: 'Convento for friars. (1x1)' },
+            { id: 'family_housing', label: 'Family Hsg', cost: 15, w: 1, h: 1, icon: Icons.Home, color: 'text-orange-700', bg: 'bg-orange-100', category: 'housing', description: 'Adobe home for families. (1x1)' },
+            { id: 'men_housing', label: 'Unmarried Men', cost: 20, w: 2, h: 1, icon: Icons.User, color: 'text-blue-800', bg: 'bg-blue-100', category: 'housing', description: 'Dormitory for men. (2x1)' },
+            { id: 'women_housing', label: 'Unmarried Women', cost: 20, w: 2, h: 1, icon: Icons.User, color: 'text-pink-800', bg: 'bg-pink-100', category: 'housing', description: 'Monjerio for women. (2x1)' },
+            { id: 'soldiers', label: 'Barracks', cost: 25, w: 3, h: 1, icon: Icons.Tent, color: 'text-red-800', bg: 'bg-red-100', category: 'housing', description: 'Soldier housing. (3x1)' },
+
+            // FOOD & FARM
+            { id: 'garden', label: 'Garden', cost: 10, w: 1, h: 1, icon: Icons.Sprout, color: 'text-emerald-700', bg: 'bg-emerald-100', category: 'food', description: 'Kitchen garden. (1x1)' },
+            { id: 'orchard', label: 'Orchard', cost: 20, w: 2, h: 2, icon: Icons.Apple, color: 'text-lime-700', bg: 'bg-lime-100', category: 'food', description: 'Fruit trees. (2x2)' },
+            { id: 'farm_field', label: 'Farm Field', cost: 15, w: 2, h: 2, icon: Icons.Wheat, color: 'text-yellow-700', bg: 'bg-yellow-100', category: 'food', description: 'Wheat & Corn fields. (2x2)' },
+            { id: 'water', label: 'Water', cost: 15, w: 1, h: 1, icon: Icons.Droplets, color: 'text-blue-600', bg: 'bg-blue-100', category: 'food', description: 'Irrigation & fountains. (1x1)' },
+            
+            // ANIMALS
+            { id: 'corral', label: 'Corral', cost: 20, w: 2, h: 2, icon: Icons.Fence, color: 'text-yellow-900', bg: 'bg-amber-200', category: 'animals', description: 'Livestock pen. (2x2)' },
+            { id: 'cow', label: 'Cow Pasture', cost: 15, w: 1, h: 1, icon: Icons.Briefcase, color: 'text-stone-800', bg: 'bg-stone-300', category: 'animals', description: 'Cattle grazing. (1x1)' },
+            { id: 'chicken', label: 'Chickens', cost: 10, w: 1, h: 1, icon: Icons.Bird, color: 'text-orange-600', bg: 'bg-orange-50', category: 'animals', description: 'Coop for eggs. (1x1)' },
+
+            // TRADES
+            { id: 'blacksmith', label: 'Blacksmith', cost: 25, w: 1, h: 1, icon: Icons.Hammer, color: 'text-slate-800', bg: 'bg-slate-300', category: 'trade', description: 'Metal work. (1x1)' },
+            { id: 'carpenter', label: 'Carpenter', cost: 25, w: 1, h: 1, icon: Icons.Saw, color: 'text-amber-900', bg: 'bg-amber-100', category: 'trade', description: 'Wood work. (1x1)' },
+            { id: 'tannery', label: 'Tannery', cost: 15, w: 1, h: 1, icon: Icons.Box, color: 'text-amber-900', bg: 'bg-amber-200', category: 'trade', description: 'Hides & tallow. (1x1)' },
+            { id: 'workshop', label: 'Workshop', cost: 20, w: 2, h: 1, icon: Icons.Hammer, color: 'text-slate-700', bg: 'bg-slate-200', category: 'trade', description: 'General crafts. (2x1)' },
+        ];
+
+        // RESTORED HARMONY BONUSES
+        const ADJACENCY_BONUSES = [
+            { type1: 'garden', type2: 'water', bonus: 5, message: 'Irrigation Bonus! (Garden + Water)' },
+            { type1: 'orchard', type2: 'water', bonus: 5, message: 'Irrigation Bonus! (Orchard + Water)' },
+            { type1: 'farm_field', type2: 'water', bonus: 5, message: 'Irrigation Bonus! (Farm + Water)' },
+            { type1: 'church', type2: 'plaza', bonus: 10, message: 'Town Center Bonus! (Church + Plaza)' },
+            { type1: 'workshop', type2: 'quarters', bonus: 3, message: 'Worker Access! (Workshop + Qtrs)' },
+            { type1: 'tannery', type2: 'corral', bonus: 5, message: 'Supply Chain! (Tannery + Corral)' },
+            { type1: 'church', type2: 'belltower', bonus: 5, message: 'Classic Design! (Church + Bell)' },
+            { type1: 'priest_qtrs', type2: 'church', bonus: 5, message: 'Holy Connection! (Priest + Church)' },
+            { type1: 'cow', type2: 'corral', bonus: 3, message: 'Ranching! (Cow + Corral)' },
         ];
 
         const HISTORICAL_TIPS = [
             "Mission churches were made of adobe (uh-DOH-be), a brick made of mud and straw.",
             "Bells rang at sunrise to call everyone to work and morning prayers.",
             "Tallow (animal fat) from the cattle was used to make soap and candles.",
-            "Missions were designed like self-sufficient villages with housing, farms, and workshops.",
-            "The central courtyard, or Plaza, was enclosed by buildings for protection and community.",
-            "Mission Indians learned skilled trades like carpentry, blacksmithing, and leatherwork.",
-            "Hides from cattle were 'tanned' in vats to create leather for saddles and shoes.",
-            "Orchards provided fruit, while gardens supplied beans, corn, and wheat.",
+            "Unmarried women lived in the 'Monjerio', separated for protection and instruction.",
+            "The central courtyard, or Plaza, was enclosed by buildings for protection.",
+            "Mission Indians learned trades like carpentry, blacksmithing, and leatherwork.",
+            "Cattle hides were 'tanned' to create leather for saddles and shoes.",
+            "Priests lived in the 'Convento', usually attached to the church.",
             "El Camino Real ('The Royal Road') connected all the California missions.",
         ];
 
-        const ADJACENCY_BONUSES = [
-            { type1: 'garden', type2: 'water', bonus: 5, message: 'Irrigation Bonus! (Garden + Water)' },
-            { type1: 'orchard', type2: 'water', bonus: 5, message: 'Irrigation Bonus! (Orchard + Water)' },
-            { type1: 'church', type2: 'plaza', bonus: 10, message: 'Town Center Bonus! (Church + Plaza)' },
-            { type1: 'workshop', type2: 'quarters', bonus: 3, message: 'Worker Access! (Workshop + Qtrs)' },
-            { type1: 'tannery', type2: 'corral', bonus: 5, message: 'Supply Chain! (Tannery + Corral)' },
-            { type1: 'church', type2: 'belltower', bonus: 5, message: 'Classic Design! (Church + Bell)' },
-        ];
+        const SplashScreen = ({ onStart }) => (
+            <div className="fixed inset-0 bg-stone-900/80 z-[100] flex items-center justify-center p-4 animate-fade-in no-print">
+                <div className="bg-[#f0ede6] p-8 rounded-xl max-w-lg w-full shadow-2xl border-4 border-stone-300 relative text-center">
+                    <div className="mx-auto bg-amber-700 text-white w-16 h-16 rounded-full flex items-center justify-center mb-4 shadow-lg">
+                        <Icons.Church size={32} />
+                    </div>
+                    <h1 className="text-4xl font-bold text-stone-800 mb-2">Mission Architect</h1>
+                    <p className="text-stone-600 italic mb-6">4th Grade History Project</p>
+                    
+                    <div className="bg-white p-4 rounded-lg shadow-sm text-sm text-stone-700 mb-6 text-left">
+                        <p className="mb-2"><strong>Instructions:</strong></p>
+                        <ul className="list-disc pl-5 space-y-1">
+                            <li>Drag buildings onto the grid to build your mission.</li>
+                            <li>Place items logically (e.g., Water near Gardens) to earn <strong>Harmony Points</strong>.</li>
+                            <li>Collect <strong>Badges</strong> by building specific sets of buildings.</li>
+                        </ul>
+                    </div>
+
+                    <button 
+                        onClick={onStart}
+                        className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-lg shadow-lg transition-transform hover:scale-[1.01]"
+                    >
+                        Start Building
+                    </button>
+                </div>
+            </div>
+        );
 
         function MissionBuilder() {
             const [grid, setGrid] = useState(Array(TEACHER_CONFIG.GRID_HEIGHT).fill().map(() => Array(TEACHER_CONFIG.GRID_WIDTH).fill(null)));
@@ -138,14 +237,13 @@
             const [movesCount, setMovesCount] = useState(0);
             
             const [hoverState, setHoverState] = useState({ r: null, c: null, valid: true, footprint: [] });
-
-            // Calculate minimum cost to check for "Game Over"
+            
             const minCost = useMemo(() => Math.min(...BUILDING_TYPES.map(b => b.cost)), []);
 
             useEffect(() => {
-                const savedGrid = localStorage.getItem('missionGrid_v4.0');
-                const savedAdobe = localStorage.getItem('missionAdobe_v4.0');
-                const savedBadges = localStorage.getItem('missionBadges_v4.0');
+                const savedGrid = localStorage.getItem('missionGrid_v5.1');
+                const savedAdobe = localStorage.getItem('missionAdobe_v5.1');
+                const savedBadges = localStorage.getItem('missionBadges_v5.1');
                 
                 if (savedGrid) setGrid(JSON.parse(savedGrid));
                 if (savedAdobe) setAdobe(parseInt(savedAdobe));
@@ -153,9 +251,9 @@
             }, []);
 
             useEffect(() => {
-                localStorage.setItem('missionGrid_v4.0', JSON.stringify(grid));
-                localStorage.setItem('missionAdobe_v4.0', adobe.toString());
-                localStorage.setItem('missionBadges_v4.0', JSON.stringify(badges));
+                localStorage.setItem('missionGrid_v5.1', JSON.stringify(grid));
+                localStorage.setItem('missionAdobe_v5.1', adobe.toString());
+                localStorage.setItem('missionBadges_v5.1', JSON.stringify(badges));
                 calculateScore();
             }, [grid]);
 
@@ -166,24 +264,21 @@
                 let newBadges = [];
                 const buildings = [];
 
-                // 1. Collect all "Master" buildings
                 for(let r=0; r<TEACHER_CONFIG.GRID_HEIGHT; r++){
                     for(let c=0; c<TEACHER_CONFIG.GRID_WIDTH; c++){
                         if(grid[r][c] && grid[r][c].master){
                             buildings.push({ ...grid[r][c], r, c });
-                            // Larger buildings give more base points
                             newScore += (grid[r][c].w * grid[r][c].h); 
                         }
                     }
                 }
 
-                // 2. Check Adjacency
+                // Check Adjacency Bonuses (FIXED: Now uses ADJACENCY_BONUSES)
                 for(let i=0; i<buildings.length; i++){
                     for(let j=i+1; j<buildings.length; j++){
                         const b1 = buildings[i];
                         const b2 = buildings[j];
 
-                        // Intersection test with +1 expansion
                         const intersect = !(
                             (b1.c - 1) > (b2.c + b2.w - 1) || 
                             (b1.c + b1.w) < b2.c || 
@@ -192,6 +287,9 @@
                         );
 
                         if(intersect){
+                            newScore += 2; // Base adjacency bonus
+                            
+                            // Specific bonus check
                             ADJACENCY_BONUSES.forEach(rule => {
                                 if((b1.id === rule.type1 && b2.id === rule.type2) || 
                                    (b1.id === rule.type2 && b2.id === rule.type1)){
@@ -204,20 +302,36 @@
 
                 setScore(newScore);
 
-                // Badges
+                // BADGE LOGIC
                 const counts = {};
                 buildings.forEach(b => counts[b.id] = (counts[b.id] || 0) + 1);
+                
+                const checkBadge = (name, condition) => {
+                    if (condition && !badges.includes(name)) {
+                        newBadges.push(name);
+                    }
+                };
 
-                if (counts['garden'] >= 1 && counts['orchard'] >= 1 && counts['water'] >= 1 && !badges.includes('Self-Sufficient')) newBadges.push('Self-Sufficient');
-                if (counts['corral'] >= 1 && !badges.includes('Vaquero')) newBadges.push('Vaquero');
-                if (counts['orchard'] >= 1 && !badges.includes('Orchardist')) newBadges.push('Orchardist');
-                if (counts['church'] && counts['plaza'] && !badges.includes('Community Pillar')) newBadges.push('Community Pillar');
-                if (newScore >= TEACHER_CONFIG.BADGE_SCORE_THRESHOLD && !badges.includes('Master Architect')) newBadges.push('Master Architect');
-                if (counts['plaza'] >= 1 && counts['church'] >= 1 && counts['soldiers'] >= 1 && !badges.includes('Complete Mission')) newBadges.push('Complete Mission');
+                checkBadge('Self-Sufficient', counts['garden'] >= 1 && counts['orchard'] >= 1 && counts['water'] >= 1);
+                checkBadge('Vaquero', counts['corral'] >= 1);
+                checkBadge('Community Pillar', counts['church'] && counts['plaza']);
+                checkBadge('Complete Mission', counts['plaza'] >= 1 && counts['church'] >= 1 && counts['soldiers'] >= 1);
+                checkBadge('Happy Families', counts['men_housing'] > 0 && counts['women_housing'] > 0 && counts['family_housing'] > 0);
+                checkBadge('Plant Lover', counts['orchard'] > 0 && counts['garden'] > 0 && counts['farm_field'] > 0);
+                checkBadge('Animal Lover', counts['corral'] > 0 && counts['chicken'] > 0 && counts['cow'] > 0);
+                
+                const totalHousing = (counts['family_housing']||0) + (counts['men_housing']||0) + (counts['women_housing']||0) + (counts['priest_qtrs']||0);
+                checkBadge('Room to Grow', totalHousing > 6);
+                checkBadge('Love of God', counts['church'] > 1);
+                checkBadge('Master Craftsman', counts['blacksmith']>0 && counts['carpenter']>0 && counts['tannery']>0 && counts['workshop']>0);
+                checkBadge('Music Lover', counts['belltower'] > 3);
+                checkBadge('Creepy', counts['cemetery'] > 4);
+
 
                 if (newBadges.length > 0) {
                     const combined = [...new Set([...badges, ...newBadges])];
                     setBadges(combined);
+                    playBadgeSound(); 
                     addMessage(`New Badge: ${newBadges.join(', ')}!`);
                 }
             };
@@ -228,7 +342,6 @@
             };
 
             // --- Drag & Drop ---
-
             const handleDragStart = (e, building) => {
                 setDraggedItem(building);
                 e.dataTransfer.setData('text/plain', JSON.stringify(building));
@@ -238,7 +351,6 @@
             const handleDragOver = (e, r, c) => {
                 e.preventDefault();
                 if (!draggedItem) return;
-
                 if (hoverState.r === r && hoverState.c === c) return;
 
                 const h = draggedItem.h || 1;
@@ -250,13 +362,11 @@
                     for(let j=0; j<w; j++){
                         const targetR = r + i;
                         const targetC = c + j;
-
                         if(targetR >= TEACHER_CONFIG.GRID_HEIGHT || targetC >= TEACHER_CONFIG.GRID_WIDTH){
                             valid = false;
                         } else if(grid[targetR][targetC] !== null){
                             valid = false;
                         }
-                        
                         if(targetR < TEACHER_CONFIG.GRID_HEIGHT && targetC < TEACHER_CONFIG.GRID_WIDTH){
                            footprint.push(`${targetR}-${targetC}`);
                         }
@@ -267,7 +377,6 @@
 
             const handleDrop = (r, c) => {
                 setHoverState({ r: null, c: null, valid: true, footprint: [] });
-                
                 if (!draggedItem) return;
                 
                 if (adobe < draggedItem.cost) {
@@ -291,7 +400,6 @@
 
                 const newGrid = [...grid.map(row => [...row])];
                 newGrid[r][c] = { ...draggedItem, master: true, masterId: `${r}-${c}` };
-                
                 for(let i=0; i<h; i++){
                     for(let j=0; j<w; j++){
                         if(i===0 && j===0) continue; 
@@ -301,10 +409,8 @@
 
                 setGrid(newGrid);
                 setAdobe(prev => prev - draggedItem.cost);
-                addMessage(`Built ${draggedItem.label}`);
                 setDraggedItem(null);
 
-                // Handle Tip Cycling
                 const nextMove = movesCount + 1;
                 setMovesCount(nextMove);
                 if (nextMove % 3 === 0) {
@@ -324,12 +430,10 @@
                     mr = parseInt(parts[0]);
                     mc = parseInt(parts[1]);
                 }
-
                 const masterCell = grid[mr][mc];
                 if(!masterCell) return;
 
                 setAdobe(prev => prev + Math.floor(masterCell.cost * 0.8));
-
                 const newGrid = [...grid.map(row => [...row])];
                 const h = masterCell.h;
                 const w = masterCell.w;
@@ -341,9 +445,7 @@
                          }
                     }
                 }
-
                 setGrid(newGrid);
-                addMessage(`Removed ${masterCell.label}`);
             };
 
             const resetGame = () => {
@@ -353,289 +455,257 @@
                 setScore(0);
                 setMessages([]);
                 setMovesCount(0);
-                localStorage.removeItem('missionGrid_v4.0');
-                localStorage.removeItem('missionAdobe_v4.0');
-                localStorage.removeItem('missionBadges_v4.0');
+                localStorage.removeItem('missionGrid_v5.1');
+                localStorage.removeItem('missionAdobe_v5.1');
+                localStorage.removeItem('missionBadges_v5.1');
                 setShowSplash(true);
             };
 
-            // --- Sub-Components ---
-
-            const CompletionScreen = () => (
-                <div className="fixed inset-0 bg-stone-900/90 z-[100] flex items-center justify-center p-4 animate-fade-in">
-                    <div className="bg-white p-8 rounded-xl max-w-lg w-full shadow-2xl border-4 border-emerald-500 relative text-center">
-                         <div className="mx-auto bg-emerald-100 text-emerald-800 w-20 h-20 rounded-full flex items-center justify-center mb-4 shadow-sm animate-bounce-small">
-                            <Icons.Trophy size={40} />
-                        </div>
-                        <h2 className="text-3xl font-bold text-stone-800 mb-2">Mission Complete!</h2>
-                        <p className="text-stone-600 mb-6">You used all your Adobe bricks. Here is your summary:</p>
-                        
-                        <div className="flex justify-center gap-8 mb-8">
-                            <div className="text-center">
-                                <div className="text-4xl font-bold text-emerald-600">{score}</div>
-                                <div className="text-xs uppercase tracking-wide text-stone-400 font-bold">Harmony</div>
-                            </div>
-                             <div className="text-center">
-                                <div className="text-4xl font-bold text-amber-600">{badges.length}</div>
-                                <div className="text-xs uppercase tracking-wide text-stone-400 font-bold">Badges</div>
-                            </div>
-                        </div>
-
-                        {badges.length > 0 && (
-                            <div className="mb-8">
-                                <h3 className="text-sm font-bold text-stone-500 uppercase mb-3">Badges Earned</h3>
-                                <div className="flex flex-wrap gap-2 justify-center">
-                                    {badges.map((b, i) => (
-                                        <span key={i} className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-bold border border-amber-200">
-                                            {b}
+            // --- Grid Renderer Component ---
+            const GridRenderer = ({ isPreview = false }) => (
+                <div 
+                    className={`grid gap-1 border-4 border-[#d6d2c4] p-1 bg-[#d6d2c4] rounded select-none shadow-inner print-grid-container mx-auto`}
+                    style={{
+                        // NEW SMART SCALING
+                        // Uses 1fr so tracks fill available space automatically
+                        // The container is constrained by flexbox in the main layout
+                        width: '100%',
+                        height: '100%',
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        aspectRatio: `${TEACHER_CONFIG.GRID_WIDTH} / ${TEACHER_CONFIG.GRID_HEIGHT}`,
+                        gridTemplateColumns: `repeat(${TEACHER_CONFIG.GRID_WIDTH}, 1fr)`,
+                        gridTemplateRows: `repeat(${TEACHER_CONFIG.GRID_HEIGHT}, 1fr)`,
+                    }}
+                >
+                    {grid.map((row, r) => (
+                        row.map((cell, c) => {
+                            const isHovered = !isPreview && hoverState.footprint.includes(`${r}-${c}`);
+                            const isValidHover = !isPreview && hoverState.valid;
+                            
+                            let content = null;
+                            
+                            if (cell && cell.master) {
+                                const bInfo = BUILDING_TYPES.find(b => b.id === cell.id) || cell;
+                                const Icon = bInfo.icon || Icons.Home;
+                                
+                                content = (
+                                    <div 
+                                        style={{
+                                            // Using calc with 100% allows it to span the fluid fr cells perfectly
+                                            width: `calc(${cell.w * 100}% + ${(cell.w - 1) * 0.25}rem)`,
+                                            height: `calc(${cell.h * 100}% + ${(cell.h - 1) * 0.25}rem)`,
+                                        }}
+                                        className={`absolute top-0 left-0 z-10 p-1 rounded-md shadow-md border border-white/40 
+                                                    flex flex-col items-center justify-center text-center transition-transform hover:scale-[1.02] 
+                                                    ${bInfo.bg} ${bInfo.color} group
+                                                  `}
+                                    >
+                                        <div className="opacity-90 flex-shrink-0">
+                                            {/* Scale icon based on cell width relative to viewport might be tricky with fr, so we keep fixed size or use % */}
+                                            <Icon size={isPreview ? 16 : 24} />
+                                        </div>
+                                        
+                                        <span className="text-[8px] md:text-[10px] font-bold leading-none mt-0.5 uppercase tracking-wide opacity-80 truncate w-full">
+                                            {bInfo.label}
                                         </span>
-                                    ))}
+                                        
+                                        {!isPreview && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleDelete(r, c); }}
+                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600 scale-75 z-20 no-print"
+                                                title="Demolish"
+                                            >
+                                                <Icons.X size={12} />
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            }
+                            
+                            return (
+                                <div
+                                    key={`${r}-${c}`}
+                                    onDragOver={(e) => !isPreview && handleDragOver(e, r, c)}
+                                    onDrop={() => !isPreview && handleDrop(r, c)}
+                                    className={`
+                                        relative rounded transition-all duration-200 w-full h-full
+                                        bg-[#f0ede6]
+                                        ${isHovered 
+                                            ? (isValidHover ? 'bg-emerald-200/80 ring-2 ring-emerald-500 z-20' : 'bg-red-200/80 ring-2 ring-red-500 z-20') 
+                                            : ''}
+                                    `}
+                                >
+                                    {content}
+                                    {!cell && !isHovered && (
+                                        <div className="w-1 h-1 bg-stone-300 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-20" />
+                                    )}
                                 </div>
-                            </div>
-                        )}
-
-                        <button 
-                            onClick={resetGame}
-                            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold shadow-lg transition-transform hover:scale-[1.01]"
-                        >
-                            Start New Mission
-                        </button>
-                    </div>
+                            );
+                        })
+                    ))}
                 </div>
             );
 
-            const SplashScreen = () => (
-                <div className="fixed inset-0 bg-stone-900/80 z-[100] flex items-center justify-center p-4 animate-fade-in">
-                    <div className="bg-[#f0ede6] p-8 rounded-xl max-w-2xl w-full shadow-2xl border-4 border-stone-300 relative">
-                        <div className="text-center mb-6">
-                            <div className="mx-auto bg-amber-700 text-white w-16 h-16 rounded-full flex items-center justify-center mb-4 shadow-lg">
-                                <Icons.Church size={32} />
-                            </div>
-                            <h1 className="text-4xl font-bold text-stone-800 mb-2">Build a California Mission</h1>
-                            <p className="text-stone-600 italic">4th Grade History Project</p>
-                        </div>
+            // --- Sub-Components ---
+            const CompletionScreen = () => (
+                <div className="fixed inset-0 bg-stone-900/90 z-[100] flex items-center justify-center p-4 animate-fade-in no-print">
+                    <div className="bg-white p-6 rounded-xl max-w-4xl w-full shadow-2xl border-4 border-emerald-500 relative flex flex-col md:flex-row gap-8 max-h-[90vh] overflow-y-auto">
                         
-                        <div className="grid md:grid-cols-3 gap-4 mb-8 text-sm text-stone-700">
-                            <div className="bg-white p-4 rounded-lg shadow-sm">
-                                <h3 className="font-bold text-amber-800 mb-2 flex items-center gap-2">
-                                    <Icons.Wheat size={16}/> Agriculture
-                                </h3>
-                                <p>Plant <strong>Gardens</strong> and <strong>Orchards</strong> near <strong>Water</strong> sources to grow food for the community.</p>
+                        <div className="flex-1 text-center md:text-left">
+                            <h2 className="text-3xl font-bold text-stone-800 mb-2">Mission Complete!</h2>
+                            <p className="text-stone-600 mb-6">Excellent work, Architect.</p>
+                            
+                            <div className="flex gap-6 mb-6 justify-center md:justify-start">
+                                <div className="text-center bg-emerald-50 p-3 rounded-lg">
+                                    <div className="text-3xl font-bold text-emerald-600">{score}</div>
+                                    <div className="text-xs uppercase tracking-wide text-stone-400 font-bold">Harmony</div>
+                                </div>
+                                <div className="text-center bg-amber-50 p-3 rounded-lg">
+                                    <div className="text-3xl font-bold text-amber-600">{badges.length}</div>
+                                    <div className="text-xs uppercase tracking-wide text-stone-400 font-bold">Badges</div>
+                                </div>
                             </div>
-                            <div className="bg-white p-4 rounded-lg shadow-sm">
-                                <h3 className="font-bold text-amber-800 mb-2 flex items-center gap-2">
-                                    <Icons.Hammer size={16}/> Industry
-                                </h3>
-                                <p>Build <strong>Workshops</strong> and <strong>Tanneries</strong> to make tools, candles, and leather.</p>
-                            </div>
-                            <div className="bg-white p-4 rounded-lg shadow-sm">
-                                <h3 className="font-bold text-amber-800 mb-2 flex items-center gap-2">
-                                    <Icons.Square size={16}/> Community
-                                </h3>
-                                <p>Center your mission around a large <strong>Plaza</strong> and <strong>Church</strong> for gathering.</p>
+
+                            {badges.length > 0 && (
+                                <div className="mb-8">
+                                    <h3 className="text-sm font-bold text-stone-500 uppercase mb-2">Badges Earned</h3>
+                                    <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+                                        {badges.map((b, i) => (
+                                            <span key={i} className="bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-xs font-bold border border-amber-200">
+                                                {b}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            
+                            <div className="flex gap-2">
+                                <button 
+                                    onClick={() => window.print()}
+                                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow transition-transform hover:scale-[1.01]"
+                                >
+                                    Print Mission
+                                </button>
+                                <button 
+                                    onClick={resetGame}
+                                    className="flex-1 py-3 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg font-bold shadow transition-transform hover:scale-[1.01]"
+                                >
+                                    Start Over
+                                </button>
                             </div>
                         </div>
 
-                        <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg mb-8 text-sm text-amber-900 flex gap-3">
-                            <Icons.Info size={24} className="flex-shrink-0" />
-                            <p><strong>Goal:</strong> Use your Adobe bricks wisely. Drag buildings onto the grid. Try to create a self-sufficient layout to earn badges like "Vaquero" and "Orchardist".</p>
+                        <div className="flex-1 bg-stone-100 p-4 rounded-lg flex items-center justify-center">
+                            <div className="pointer-events-none scale-75 origin-top w-full h-full flex items-center justify-center">
+                                <GridRenderer isPreview={true} />
+                            </div>
                         </div>
-
-                        <button 
-                            onClick={() => setShowSplash(false)}
-                            className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-lg shadow-lg transition-transform hover:scale-[1.01]"
-                        >
-                            Start Building
-                        </button>
                     </div>
                 </div>
             );
 
             // --- Render ---
-
-            // Check if Game Over (No bricks left to build cheapest building)
             const isGameOver = !showSplash && adobe < minCost;
 
             return (
-                <div className="min-h-screen bg-stone-50 font-sans text-stone-800 flex flex-col items-center p-4">
+                <div className="h-screen flex flex-col overflow-hidden bg-stone-50 text-stone-800">
                     
-                    {showSplash && <SplashScreen />}
+                    {showSplash && <SplashScreen onStart={() => setShowSplash(false)} />}
+                    
                     {isGameOver && <CompletionScreen />}
 
+                    {/* PRINT HEADER */}
+                    <div className="print-only p-8 text-center">
+                        <h1 className="text-4xl font-bold mb-2">My California Mission</h1>
+                        <p className="text-xl mb-4">Harmony Score: {score} | Badges: {badges.length}</p>
+                        <div className="flex flex-wrap gap-2 justify-center mb-8">
+                             {badges.map((b, i) => <span key={i} className="print-badge px-2 py-1 rounded text-sm">{b}</span>)}
+                        </div>
+                        <div className="flex justify-center" style={{ width: '600px', height: '400px', margin: '0 auto' }}>
+                            <GridRenderer isPreview={true} />
+                        </div>
+                    </div>
+
                     {/* HEADER */}
-                    <header className="w-full max-w-6xl flex flex-col md:flex-row gap-4 justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border-b-4 border-stone-200">
-                        <div className="flex-shrink-0 text-center md:text-left">
-                            <h1 className="text-2xl font-bold text-stone-700 tracking-tight flex items-center gap-2 justify-center md:justify-start">
-                                <Icons.Church className="text-amber-700" size={28}/> Mission Architect
-                            </h1>
-                            <p className="text-stone-400 text-xs mt-1">Design a functional mission community</p>
+                    <header className="h-16 flex-shrink-0 bg-white border-b border-stone-200 flex items-center justify-between px-4 no-print shadow-sm z-20">
+                        <div className="flex items-center gap-2">
+                            <Icons.Church className="text-amber-700" size={24}/>
+                            <span className="font-bold text-lg hidden md:inline">Mission Architect</span>
                         </div>
 
-                        {/* Badges in Header */}
-                        <div className="flex-1 overflow-x-auto no-scrollbar mx-4 w-full md:w-auto">
-                            <div className="flex gap-2 items-center justify-center md:justify-start h-10 px-2">
-                                {badges.length === 0 && <span className="text-xs text-stone-300 italic">Earn badges by building...</span>}
+                        <div className="flex-1 mx-4 overflow-x-auto no-scrollbar">
+                             <div className="flex gap-2 items-center">
                                 {badges.map((badge, idx) => (
-                                    <div key={idx} className="flex-shrink-0 flex items-center gap-1 bg-amber-100 text-amber-800 px-3 py-1 rounded-full text-[10px] font-bold border border-amber-200 shadow-sm animate-fade-in">
-                                        <Icons.Award size={12} /> {badge}
+                                    <div key={idx} className="flex-shrink-0 flex items-center gap-1 bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-bold border border-amber-200 animate-fade-in">
+                                        <Icons.Award size={10} /> {badge}
                                     </div>
                                 ))}
                             </div>
                         </div>
                         
-                        <div className="flex gap-4 items-center flex-shrink-0">
-                            <div className="text-center px-4 py-1 bg-emerald-50 rounded-lg border border-emerald-100 min-w-[80px]">
-                                <p className="text-[10px] uppercase tracking-wider text-emerald-800 font-bold">Harmony</p>
-                                <p className="text-xl font-bold text-emerald-600">{score}</p>
+                        <div className="flex gap-4 items-center text-sm font-bold">
+                             <div className="text-emerald-600 flex flex-col items-center leading-none">
+                                <span className="text-[10px] uppercase text-stone-400">Harmony</span>
+                                {score}
                             </div>
-                            <div className="text-center px-4 py-1 bg-orange-50 rounded-lg border border-orange-100 min-w-[80px]">
-                                <p className="text-[10px] uppercase tracking-wider text-orange-800 font-bold">Bricks</p>
-                                <p className={`text-xl font-bold ${adobe < 20 ? 'text-red-500' : 'text-orange-700'}`}>{adobe}</p>
+                            <div className={`${adobe < 50 ? 'text-red-500' : 'text-orange-700'} flex flex-col items-center leading-none`}>
+                                <span className="text-[10px] uppercase text-stone-400">Bricks</span>
+                                {adobe}
                             </div>
-                            <button onClick={() => { if(window.confirm("Restart?")) resetGame(); }} className="p-2 hover:bg-stone-100 rounded-full text-stone-500 transition-colors" title="Reset">
-                                <Icons.RotateCcw size={18} />
-                            </button>
                         </div>
                     </header>
 
-                    {/* WORKSPACE */}
-                    <div className="w-full max-w-6xl flex flex-col lg:flex-row gap-6 items-start">
+                    {/* MAIN CONTENT */}
+                    <div className="flex-1 flex overflow-hidden relative no-print">
                         
                         {/* SIDEBAR */}
-                        <div className="w-full lg:w-64 flex-shrink-0 bg-white p-4 rounded-xl shadow-sm border border-stone-200 sticky top-4 max-h-[80vh] overflow-y-auto no-scrollbar">
-                            <h2 className="font-bold text-sm mb-4 text-stone-600 uppercase tracking-widest border-b pb-2 flex items-center gap-2">
-                                <Icons.Scroll size={16}/> Blueprints
-                            </h2>
-                            
-                            <div className="space-y-3">
+                        <div className="w-56 bg-white border-r border-stone-200 overflow-y-auto p-3 flex-shrink-0 z-10 shadow-lg">
+                            <h2 className="font-bold text-xs uppercase text-stone-400 mb-2 sticky top-0 bg-white pb-2 border-b">Structures</h2>
+                            <div className="space-y-2">
                                 {BUILDING_TYPES.map((b) => (
                                     <div 
                                         key={b.id}
                                         draggable={adobe >= b.cost}
                                         onDragStart={(e) => handleDragStart(e, b)}
                                         className={`
-                                            group relative flex items-center gap-3 p-2 rounded-lg border-2 border-transparent transition-all select-none
+                                            flex items-center gap-2 p-1.5 rounded border border-transparent transition-all select-none
                                             ${adobe >= b.cost 
                                                 ? 'hover:border-stone-300 hover:bg-stone-50 cursor-grab active:cursor-grabbing bg-white shadow-sm' 
-                                                : 'opacity-40 cursor-not-allowed bg-stone-50 grayscale'}
+                                                : 'opacity-40 cursor-not-allowed grayscale'}
                                         `}
                                     >
-                                        <div className={`w-8 h-8 flex items-center justify-center rounded-md ${b.bg} ${b.color} flex-shrink-0`}>
-                                            <b.icon size={18} />
+                                        <div className={`w-8 h-8 flex items-center justify-center rounded ${b.bg} ${b.color} flex-shrink-0`}>
+                                            <b.icon size={16} />
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-center mb-0.5">
-                                                <span className="font-bold text-xs text-stone-700 truncate">{b.label}</span>
-                                                <span className="text-[10px] font-bold bg-stone-200 px-1.5 py-0.5 rounded text-stone-600">{b.cost}</span>
-                                            </div>
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-[9px] text-stone-400 bg-stone-100 px-1 rounded border border-stone-200">{b.w}x{b.h}</span>
-                                            </div>
+                                        <div className="min-w-0">
+                                            <div className="font-bold text-[10px] leading-tight text-stone-700">{b.label}</div>
+                                            <div className="text-[9px] text-stone-400">{b.cost} bricks • {b.w}x{b.h}</div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
-                        {/* MAIN GRID */}
-                        <div className="flex-1 w-full overflow-x-auto pb-8">
-                            <div className="bg-[#e6e2d6] p-4 lg:p-8 rounded-xl shadow-inner inline-block min-w-full relative">
-                                
-                                {/* Messages Toast */}
-                                <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
-                                    {messages.map((m, i) => (
-                                        <div key={i} className="bg-stone-800 text-white text-sm py-2 px-4 rounded shadow-xl animate-bounce">
-                                            {m}
-                                        </div>
-                                    ))}
-                                </div>
-
-                                <div 
-                                    className="grid gap-1 border-2 border-[#d6d2c4] p-1 bg-[#d6d2c4] rounded select-none"
-                                    style={{
-                                        gridTemplateColumns: `repeat(${TEACHER_CONFIG.GRID_WIDTH}, 64px)`,
-                                        gridTemplateRows: `repeat(${TEACHER_CONFIG.GRID_HEIGHT}, 64px)`,
-                                    }}
-                                >
-                                    {grid.map((row, r) => (
-                                        row.map((cell, c) => {
-                                            const isHovered = hoverState.footprint.includes(`${r}-${c}`);
-                                            const isValidHover = hoverState.valid;
-                                            
-                                            let content = null;
-                                            let cellClass = "bg-[#f0ede6]"; 
-                                            
-                                            // MASTER CELL RENDER
-                                            if (cell && cell.master) {
-                                                const bInfo = BUILDING_TYPES.find(b => b.id === cell.id) || cell;
-                                                const Icon = bInfo.icon || Icons.Home;
-                                                
-                                                const width = cell.w * 64 + (cell.w - 1) * 4; 
-                                                const height = cell.h * 64 + (cell.h - 1) * 4;
-                                                const minDim = Math.min(cell.w, cell.h);
-                                                const iconSize = Math.max(24, minDim * 24);
-
-                                                content = (
-                                                    <div 
-                                                        style={{width: `${width}px`, height: `${height}px`}}
-                                                        className={`absolute top-0 left-0 z-10 p-2 rounded-lg shadow-md border-2 border-white/40 
-                                                                    flex flex-col items-center justify-center text-center transition-transform hover:scale-[1.02] 
-                                                                    ${bInfo.bg} ${bInfo.color} group relative
-                                                                  `}
-                                                    >
-                                                        <div className="opacity-90">
-                                                            <Icon size={iconSize} />
-                                                        </div>
-                                                        
-                                                        <span className="text-[10px] font-bold leading-none mt-1 uppercase tracking-wide opacity-80">
-                                                            {bInfo.label}
-                                                        </span>
-                                                        
-                                                        <button 
-                                                            onClick={(e) => { e.stopPropagation(); handleDelete(r, c); }}
-                                                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600 hover:scale-110 z-20"
-                                                            title="Demolish"
-                                                        >
-                                                            <Icons.X size={12} />
-                                                        </button>
-                                                    </div>
-                                                );
-                                            }
-                                            
-                                            return (
-                                                <div
-                                                    key={`${r}-${c}`}
-                                                    onDragOver={(e) => handleDragOver(e, r, c)}
-                                                    onDrop={() => handleDrop(r, c)}
-                                                    className={`
-                                                        relative rounded transition-all duration-200
-                                                        ${cellClass}
-                                                        ${isHovered 
-                                                            ? (isValidHover ? 'bg-emerald-200/80 ring-2 ring-emerald-500 z-20 scale-95' : 'bg-red-200/80 ring-2 ring-red-500 z-20') 
-                                                            : ''}
-                                                    `}
-                                                >
-                                                    {content}
-                                                    {!cell && !isHovered && (
-                                                        <div className="w-1 h-1 bg-stone-300 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-20" />
-                                                    )}
-                                                </div>
-                                            );
-                                        })
-                                    ))}
-                                </div>
-                                
-                                {/* DYNAMIC TIP SECTION */}
-                                <div className="mt-4 flex gap-3 items-start bg-white/50 p-3 rounded-lg border border-stone-200 text-stone-600 transition-all duration-500">
-                                    <div className="mt-0.5 text-amber-600">
-                                        <Icons.Info size={20} />
+                        {/* GRID AREA */}
+                        <div className="flex-1 bg-[#d6d2c4] flex items-center justify-center p-4 relative overflow-hidden">
+                             <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+                                {messages.map((m, i) => (
+                                    <div key={i} className="bg-stone-800 text-white text-xs py-2 px-3 rounded shadow-xl animate-bounce">
+                                        {m}
                                     </div>
-                                    <div className="text-sm">
-                                        <p className="font-bold text-xs uppercase text-stone-400 mb-1">Did you know?</p>
-                                        <p className="italic leading-relaxed">{HISTORICAL_TIPS[currentTipIndex]}</p>
-                                    </div>
-                                </div>
+                                ))}
+                            </div>
 
+                            {/* Flexible Container for Grid */}
+                            <div className="w-full h-full flex items-center justify-center">
+                                <GridRenderer />
+                            </div>
+
+                            {/* TIP BAR */}
+                            <div className="absolute bottom-4 left-4 right-4 bg-white/90 backdrop-blur-sm p-2 rounded-lg border border-white/50 text-stone-600 shadow-sm flex gap-3 items-center max-w-2xl mx-auto z-20">
+                                <div className="text-amber-600 flex-shrink-0"><Icons.Info size={18} /></div>
+                                <p className="text-xs italic flex-1">{HISTORICAL_TIPS[currentTipIndex]}</p>
                             </div>
                         </div>
                     </div>
