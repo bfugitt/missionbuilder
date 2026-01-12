@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>California Mission Designer</title>
+    <title>California Mission Architect 5.2 (Fixed)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -258,11 +258,26 @@
             const minCost = useMemo(() => Math.min(...BUILDING_TYPES.map(b => b.cost)), []);
 
             useEffect(() => {
-                const savedGrid = localStorage.getItem('missionGrid_v5.2');
+                const savedGridRaw = localStorage.getItem('missionGrid_v5.2');
                 const savedAdobe = localStorage.getItem('missionAdobe_v5.2');
                 const savedBadges = localStorage.getItem('missionBadges_v5.2');
                 
-                if (savedGrid) setGrid(JSON.parse(savedGrid));
+                if (savedGridRaw) {
+                    try {
+                        const savedGrid = JSON.parse(savedGridRaw);
+                        // SAFETY CHECK: Does the saved grid match the current CONFIG size?
+                        if (Array.isArray(savedGrid) && 
+                            savedGrid.length === TEACHER_CONFIG.GRID_HEIGHT && 
+                            savedGrid[0].length === TEACHER_CONFIG.GRID_WIDTH) {
+                            setGrid(savedGrid);
+                        } else {
+                            console.warn("Saved grid dimensions mismatch. Resetting grid to prevent crash.");
+                            // We do NOT setGrid, forcing it to use the default empty grid of correct size
+                        }
+                    } catch (e) {
+                        console.error("Error parsing grid", e);
+                    }
+                }
                 if (savedAdobe) setAdobe(parseInt(savedAdobe));
                 if (savedBadges) setBadges(JSON.parse(savedBadges));
             }, []);
